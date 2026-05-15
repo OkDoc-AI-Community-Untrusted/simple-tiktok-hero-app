@@ -1,28 +1,15 @@
 <ion-app>
-  <ion-split-pane contentId="main-content">
-    <ion-menu contentId="main-content">
-      <app-nav
-        [isAuthenticated]="isAuthenticated"
-        [currentUser]="currentUser"
-        (logout)="onLogout()"
-      ></app-nav>
-    </ion-menu>
-    <ion-router-outlet id="main-content"></ion-router-outlet>
-  </ion-split-pane>
+  <app-login
+    *ngIf="!isAuthenticated"
+    (login)="onLogin($event)"
+  ></app-login>
 
-  <div class="main-content">
-    <app-login
-      *ngIf="!isAuthenticated"
-      (login)="onLogin($event)"
-    ></app-login>
-
-    <div *ngIf="isAuthenticated" class="authenticated-area">
-      <app-nav
-        [isAuthenticated]="isAuthenticated"
-        [currentUser]="currentUser"
-        (logout)="onLogout()"
-      ></app-nav>
-      <app-post [user]="currentUser"></app-post>
-    </div>
+  <div *ngIf="isAuthenticated" class="authenticated-area">
+    <app-nav
+      [isAuthenticated]="isAuthenticated"
+      [currentUser]="currentUser"
+      (logout)="onLogout()"
+    ></app-nav>
+    <app-post [user]="currentUser"></app-post>
   </div>
 </ion-app>
