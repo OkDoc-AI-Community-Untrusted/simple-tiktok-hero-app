@@ -1,0 +1,89 @@
+<div class="login-container">
+  <ion-content [fullscreen]="true">
+    <div class="login-content">
+      <div class="logo-area">
+        <ion-icon name="logo-tiktok"></ion-icon>
+        <h1>TikTok Hero App</h1>
+        <p class="subtitle">Create and share your content</p>
+      </div>
+
+      <div *ngIf="error" class="error-message ion-margin">
+        <ion-icon name="alert-circle"></ion-icon>
+        {{ error }}
+      </div>
+
+      <div *ngIf="!showApiKeySetup" class="login-form ion-padding">
+        <ion-button
+          expand="block"
+          color="primary"
+          [disabled]="isLoading"
+          (click)="startLogin()"
+          class="login-btn"
+        >
+          <ion-icon name="logo-tiktok" slot="start"></ion-icon>
+          {{ isLoading ? 'Logging in...' : 'Login with TikTok' }}
+        </ion-button>
+
+        <button
+          class="setup-link"
+          (click)="toggleApiKeySetup()"
+          type="button"
+        >
+          Configure API Keys
+        </button>
+
+        <div class="info-box ion-margin-top">
+          <ion-icon name="information-circle"></ion-icon>
+          <p>
+            To use this app, you need to authenticate with your TikTok account
+            and configure the necessary API credentials.
+          </p>
+        </div>
+      </div>
+
+      <div *ngIf="showApiKeySetup" class="api-setup ion-padding">
+        <h2>Configure API Keys</h2>
+
+        <ion-item>
+          <ion-label position="floating">TikTok Client ID</ion-label>
+          <ion-input
+            [(ngModel)]="clientId"
+            placeholder="Your TikTok Client ID"
+            type="password"
+          ></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="floating">Backend URL</ion-label>
+          <ion-input
+            [(ngModel)]="backendUrl"
+            placeholder="http://localhost:3000"
+            type="url"
+          ></ion-input>
+        </ion-item>
+
+        <div class="button-group ion-margin-top">
+          <ion-button
+            expand="block"
+            color="success"
+            (click)="saveApiKeys()"
+          >
+            Save Configuration
+          </ion-button>
+          <ion-button
+            expand="block"
+            color="medium"
+            (click)="toggleApiKeySetup()"
+          >
+            Cancel
+          </ion-button>
+        </div>
+
+        <p class="setup-info ion-margin-top">
+          See the README or setup guide for instructions on how to obtain
+          these credentials.
+        </p>
+      </div>
+    </div>
+  </ion-content>
+</div>

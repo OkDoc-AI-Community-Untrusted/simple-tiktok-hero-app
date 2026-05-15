@@ -1,0 +1,292 @@
+.post-container {
+  --padding-top: 20px;
+  --padding-bottom: 20px;
+  background-color: #f5f5f5;
+}
+
+.post-form-wrapper {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.post-header {
+  text-align: center;
+  margin-bottom: 30px;
+
+  h1 {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 0;
+    color: #000;
+  }
+
+  .subtitle {
+    color: #666;
+    font-size: 14px;
+    margin: 8px 0 0 0;
+  }
+}
+
+.post-form {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.form-section {
+  margin-bottom: 24px;
+
+  &:last-of-type {
+    margin-bottom: 16px;
+  }
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.caption-input {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  max-height: 300px;
+
+  &:focus {
+    outline: none;
+    border-color: #25f4ee;
+    box-shadow: 0 0 0 3px rgba(37, 244, 238, 0.1);
+  }
+
+  &:disabled {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+  }
+}
+
+.char-count {
+  font-size: 12px;
+  color: #999;
+  margin-top: 6px;
+  text-align: right;
+}
+
+.file-upload-area {
+  border: 2px dashed #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: #25f4ee;
+    background-color: #f9fffe;
+  }
+}
+
+.upload-placeholder {
+  ion-icon {
+    font-size: 48px;
+    color: #25f4ee;
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  p {
+    margin: 4px 0;
+    color: #333;
+
+    &.file-hint {
+      color: #999;
+      font-size: 12px;
+    }
+  }
+}
+
+.preview-container {
+  margin-bottom: 16px;
+}
+
+.media-preview {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.hidden-input {
+  display: none;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.file-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background-color: #25f4ee;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background-color: #1dd1c6;
+    transform: translateY(-2px);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  ion-icon {
+    font-size: 18px;
+  }
+
+  &.clear-btn {
+    background-color: #f44336;
+
+    &:hover:not(:disabled) {
+      background-color: #d32f2f;
+    }
+  }
+}
+
+.selected-file {
+  font-size: 12px;
+  color: #388e3c;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  ion-icon {
+    font-size: 16px;
+  }
+}
+
+.submit-btn {
+  font-weight: 600;
+  padding: 12px !important;
+  font-size: 16px;
+
+  ion-spinner {
+    margin-right: 8px;
+  }
+
+  &.loading {
+    opacity: 0.7;
+  }
+}
+
+.error-message,
+.success-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+
+  ion-icon {
+    flex-shrink: 0;
+    font-size: 20px;
+  }
+}
+
+.error-message {
+  background-color: #ffebee;
+  border: 1px solid #f44336;
+  color: #c62828;
+}
+
+.success-message {
+  background-color: #e8f5e9;
+  border: 1px solid #4caf50;
+  color: #2e7d32;
+}
+
+.info-box {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  background-color: #e3f2fd;
+  border: 1px solid #2196f3;
+  border-radius: 8px;
+  margin-top: 20px;
+  font-size: 13px;
+
+  ion-icon {
+    flex-shrink: 0;
+    color: #1976d2;
+    font-size: 20px;
+    margin-top: 2px;
+  }
+
+  p {
+    margin: 4px 0;
+    color: #1565c0;
+
+    &:first-child {
+      font-weight: 600;
+      margin-top: 0;
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .post-form-wrapper {
+    padding: 12px;
+  }
+
+  .post-form {
+    padding: 16px;
+  }
+
+  .post-header h1 {
+    font-size: 24px;
+  }
+
+  .caption-input {
+    min-height: 100px;
+  }
+
+  .file-upload-area {
+    padding: 16px;
+  }
+
+  .upload-placeholder ion-icon {
+    font-size: 36px;
+  }
+
+  .media-preview {
+    max-height: 200px;
+  }
+
+  .file-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
