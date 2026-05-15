@@ -1,125 +1,116 @@
 import { Injectable } from '@angular/core';
-import { AuthService } from './auth.service';
+import { AuthStateService } from './auth-state.service';
+import { ConfigService } from './config.service';
 
-export interface PostData {
-  caption: string;
-  videoFile?: File;
-  imageFile?: File;
-  coverImageUrl?: string;
+export interface CreatorInfo {
+  creatorAvatarUrl?: string;
+  creatorUsername?: string;
+  creatorNickname?: string;
+  privacyLevelOptions?: string[];
+  commentDisabled?: boolean;
+  duetDisabled?: boolean;
+  stitchDisabled?: boolean;
+  maxVideoPostDurationSec?: number;
 }
 
-export interface PostResponse {
-  success: boolean;
-  videoId?: string;
-  error?: string;
+export interface PostResult {
+  publishId: string;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+/**
+ * Calls our backend, which proxies to TikTok's v2 Content Posting API.
+ * Token exchange and the secret-bearing endpoints stay on the backend;
+ * the frontend just forwards the user's access token.
+ */
+@Injectable({ providedIn: 'root' })
 export class TikTokService {
-  private readonly API_BASE_URL = 'https://open.tiktokapis.com/v1';
-  private readonly BACKEND_BASE_URL =
-    localStorage.getItem('backend_url') || 'http://localhost:3000';
+  constructor(
+    private state: AuthStateService,
+    private config: ConfigService
+  ) {}
 
-  constructor(private authService: AuthService) {}
-
-  async uploadVideo(file: File): Promise<{ uploadUrl: string; uploadId: string }> {
-    const accessToken = this.authService.getAccessToken();
-    if (!accessToken) {
-      throw new Error('Not authenticated');
-    }
-
-    const formData = new FormData();
-    formData.append('video', file);
-    formData.append('access_token', accessToken);
-
-    const response = await fetch(
-      `${this.BACKEND_BASE_URL}/api/tiktok/upload/init`,
-      {
-        method: 'POST',
-        body: formData,
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to initialize upload');
-    }
-
-    return await response.json();
+  async getCreatorInfo(): Promise<CreatorInfo> {
+    const res = await this.backend('/api/tiktok/creator-info', { method: 'POST' });
+    const data = res.data ?? {};
+    return {
+      creatorAvatarUrl: data.creator_avatar_url,
+      creatorUsername: data.creator_username,
+      creatorNickname: data.creator_nickname,
+      privacyLevelOptions: data.privacy_level_options,
+      commentDisabled: data.comment_disabled,
+      duetDisabled: data.duet_disabled,
+      stitchDisabled: data.stitch_disabled,
+      maxVideoPostDurationSec: data.max_video_post_duration_sec,
+    };
   }
 
-  async createPost(postData: PostData): Promise<PostResponse> {
-    const accessToken = this.authService.getAccessToken();
-    if (!accessToken) {
-      throw new Error('Not authenticated');
+  async publishVideo(file: File, caption: string, privacyLevel: string): Promise<PostResult> {
+    const init = await this.backend('/api/tiktok/video/init', {
+      method: 'POST',
+      body: {
+        title: caption,
+        privacy_level: privacyLevel,
+        video_size: file.size,
+      },
+    });
+
+    const uploadUrl: string = init.data?.upload_url;
+    const publishId: string = init.data?.publish_id;
+    if (!uploadUrl || !publishId) {
+      throw new Error('Backend did not return upload_url and publish_id.');
     }
 
-    try {
-      let videoId: string | undefined;
+    await this.uploadFile(uploadUrl, file);
+    return { publishId };
+  }
 
-      if (postData.videoFile) {
-        const uploadData = await this.uploadVideo(postData.videoFile);
-        videoId = uploadData.uploadId;
-      }
+  async getPublishStatus(publishId: string): Promise<{ status: string; failReason?: string }> {
+    const res = await this.backend('/api/tiktok/publish/status', {
+      method: 'POST',
+      body: { publish_id: publishId },
+    });
+    return {
+      status: res.data?.status,
+      failReason: res.data?.fail_reason,
+    };
+  }
 
-      const response = await fetch(
-        `${this.BACKEND_BASE_URL}/api/tiktok/post/create`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            caption: postData.caption,
-            videoId: videoId,
-            coverImageUrl: postData.coverImageUrl,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        return {
-          success: false,
-          error: error.message || 'Failed to create post',
-        };
-      }
-
-      const result = await response.json();
-      return {
-        success: true,
-        videoId: result.video_id,
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'An error occurred',
-      };
+  private async uploadFile(uploadUrl: string, file: File): Promise<void> {
+    // TikTok expects a PUT with Content-Range and Content-Type matching the file.
+    const res = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'video/mp4',
+        'Content-Range': `bytes 0-${file.size - 1}/${file.size}`,
+      },
+      body: file,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`Video upload failed: ${res.status} ${detail}`);
     }
   }
 
-  async getUserInfo(): Promise<any> {
-    const accessToken = this.authService.getAccessToken();
-    if (!accessToken) {
-      throw new Error('Not authenticated');
+  private async backend(
+    path: string,
+    init: { method: string; body?: unknown }
+  ): Promise<any> {
+    const token = this.state.current?.accessToken;
+    if (!token) throw new Error('Not authenticated.');
+
+    const res = await fetch(`${this.config.backendUrl}${path}`, {
+      method: init.method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`${path} failed: ${res.status} ${detail}`);
     }
-
-    const response = await fetch(
-      `${this.BACKEND_BASE_URL}/api/tiktok/user/info`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user info');
-    }
-
-    return await response.json();
+    return res.json();
   }
 }

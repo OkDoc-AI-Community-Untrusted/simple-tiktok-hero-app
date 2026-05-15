@@ -1,113 +1,145 @@
 import { Injectable } from '@angular/core';
+import { AuthStateService, TikTokAuth } from './auth-state.service';
+import { ConfigService } from './config.service';
 
-export interface TikTokAuth {
-  accessToken: string;
-  userId: string;
-  username: string;
-  displayName: string;
-  profileImageUrl?: string;
-  tokenExpiry?: number;
-  refreshToken?: string;
+const OAUTH_AUTHORIZE_URL = 'https://www.tiktok.com/v2/auth/authorize/';
+const OAUTH_SCOPES = 'user.info.basic,video.publish,video.upload';
+const POPUP_FEATURES = 'width=600,height=750,left=200,top=100,resizable=yes,scrollbars=yes';
+
+interface BackendTokenResponse {
+  access_token: string;
+  open_id: string;
+  expires_in?: number;
+  refresh_token?: string;
+  username?: string;
+  display_name?: string;
+  avatar_url?: string;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly AUTH_STORAGE_KEY = 'tiktok_auth';
-  private readonly TOKEN_EXPIRY_KEY = 'tiktok_token_expiry';
-
-  constructor() {}
-
-  saveAuth(auth: TikTokAuth): void {
-    localStorage.setItem(this.AUTH_STORAGE_KEY, JSON.stringify(auth));
-    if (auth.tokenExpiry) {
-      localStorage.setItem(
-        this.TOKEN_EXPIRY_KEY,
-        auth.tokenExpiry.toString()
-      );
-    }
-  }
-
-  getStoredAuth(): TikTokAuth | null {
-    const stored = localStorage.getItem(this.AUTH_STORAGE_KEY);
-    if (!stored) {
-      return null;
-    }
-
-    const auth: TikTokAuth = JSON.parse(stored);
-    const expiry = localStorage.getItem(this.TOKEN_EXPIRY_KEY);
-
-    if (expiry && parseInt(expiry) < Date.now()) {
-      this.logout();
-      return null;
-    }
-
-    return auth;
-  }
+  constructor(
+    private state: AuthStateService,
+    private config: ConfigService
+  ) {}
 
   isAuthenticated(): boolean {
-    return this.getStoredAuth() !== null;
-  }
-
-  logout(): void {
-    localStorage.removeItem(this.AUTH_STORAGE_KEY);
-    localStorage.removeItem(this.TOKEN_EXPIRY_KEY);
+    return this.state.current !== null;
   }
 
   getAccessToken(): string | null {
-    const auth = this.getStoredAuth();
-    return auth?.accessToken || null;
+    return this.state.current?.accessToken ?? null;
   }
 
-  handleOAuthCallback(code: string): Promise<TikTokAuth> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const backendUrl = localStorage.getItem('backend_url') || '';
-        const response = await fetch(`${backendUrl}/api/auth/tiktok/callback`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ code }),
-        });
+  logout(): void {
+    this.state.clear();
+  }
 
-        if (!response.ok) {
-          reject(new Error('Failed to authenticate with TikTok'));
-          return;
+  /**
+   * Opens TikTok OAuth in a popup window. The popup will redirect back to
+   * our app, which detects it's running in a popup and posts the auth code
+   * back to this window. Required because the app runs inside an iframe in
+   * OkDoc — a full-page redirect would navigate the iframe away.
+   */
+  async startOAuthFlow(): Promise<TikTokAuth> {
+    if (!this.config.isConfigured) {
+      throw new Error('Configure your TikTok client key and backend URL first.');
+    }
+
+    const state = this.randomState();
+    sessionStorage.setItem('oauth_state', state);
+
+    const authUrl = this.buildAuthorizeUrl(state);
+    const popup = window.open(authUrl, 'tiktok_auth', POPUP_FEATURES);
+
+    if (!popup) {
+      throw new Error('Popup was blocked. Allow popups for this site and try again.');
+    }
+
+    const code = await this.waitForCallback(popup, state);
+    return this.exchangeCode(code);
+  }
+
+  private buildAuthorizeUrl(state: string): string {
+    const params = new URLSearchParams({
+      client_key: this.config.clientKey,
+      response_type: 'code',
+      scope: OAUTH_SCOPES,
+      redirect_uri: this.config.redirectUri,
+      state,
+    });
+    return `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
+  }
+
+  private waitForCallback(popup: Window, expectedState: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        window.removeEventListener('message', onMessage);
+        clearInterval(pollClosed);
+      };
+
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data;
+        if (!data || data.type !== 'tiktok_oauth_callback') return;
+        cleanup();
+        try {
+          popup.close();
+        } catch {
+          // popup may already be closed
         }
+        if (data.error) {
+          reject(new Error(data.error_description || data.error));
+        } else if (data.state !== expectedState) {
+          reject(new Error('OAuth state mismatch — possible CSRF attempt.'));
+        } else if (!data.code) {
+          reject(new Error('No authorization code returned.'));
+        } else {
+          resolve(data.code);
+        }
+      };
 
-        const data = await response.json();
-        const auth: TikTokAuth = {
-          accessToken: data.access_token,
-          userId: data.open_id,
-          username: data.username,
-          displayName: data.display_name,
-          profileImageUrl: data.avatar_url,
-          tokenExpiry: data.expires_in
-            ? Date.now() + data.expires_in * 1000
-            : undefined,
-          refreshToken: data.refresh_token,
-        };
+      const pollClosed = setInterval(() => {
+        if (popup.closed) {
+          cleanup();
+          reject(new Error('Login window was closed before completion.'));
+        }
+      }, 500);
 
-        this.saveAuth(auth);
-        resolve(auth);
-      } catch (error) {
-        reject(error);
-      }
+      window.addEventListener('message', onMessage);
     });
   }
 
-  startOAuthFlow(): void {
-    const clientId = localStorage.getItem('tiktok_client_id') || '';
-    const redirectUri = encodeURIComponent(window.location.origin);
-    const scope = 'user.info.basic,video.create';
-    const responseType = 'code';
+  private async exchangeCode(code: string): Promise<TikTokAuth> {
+    const response = await fetch(`${this.config.backendUrl}/api/auth/tiktok/callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, redirect_uri: this.config.redirectUri }),
+    });
 
-    const authUrl = `https://www.tiktok.com/v1/oauth/authorize/?client_key=${clientId}&response_type=${responseType}&scope=${scope}&redirect_uri=${redirectUri}&state=${Math.random()
-      .toString(36)
-      .substring(7)}`;
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Token exchange failed: ${response.status} ${detail}`);
+    }
 
-    window.location.href = authUrl;
+    const data = (await response.json()) as BackendTokenResponse;
+
+    const auth: TikTokAuth = {
+      accessToken: data.access_token,
+      openId: data.open_id,
+      username: data.username,
+      displayName: data.display_name,
+      avatarUrl: data.avatar_url,
+      refreshToken: data.refresh_token,
+      tokenExpiry: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+    };
+
+    this.state.setAuth(auth);
+    return auth;
+  }
+
+  private randomState(): string {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 }

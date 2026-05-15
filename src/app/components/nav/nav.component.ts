@@ -1,6 +1,8 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
+import { AuthService } from '../../services/auth.service';
+import { TikTokAuth } from '../../services/auth-state.service';
 
 @Component({
   selector: 'app-nav',
@@ -10,20 +12,17 @@ import { IonicModule } from '@ionic/angular';
   imports: [CommonModule, IonicModule],
 })
 export class NavComponent {
-  @Input() isAuthenticated = false;
-  @Input() currentUser: any = null;
-  @Output() logout = new EventEmitter<void>();
+  @Input() auth!: TikTokAuth;
 
-  onLogout(): void {
-    if (confirm('Are you sure you want to logout?')) {
-      this.logout.emit();
-    }
-  }
+  constructor(private authService: AuthService) {}
 
   get displayName(): string {
-    if (!this.currentUser) {
-      return 'User';
+    return this.auth.displayName || this.auth.username || this.auth.openId;
+  }
+
+  logout(): void {
+    if (confirm('Log out of TikTok?')) {
+      this.authService.logout();
     }
-    return this.currentUser.displayName || this.currentUser.username || 'User';
   }
 }

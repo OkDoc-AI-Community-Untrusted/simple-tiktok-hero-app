@@ -1,134 +1,91 @@
-<ion-content class="post-container">
-  <div class="post-form-wrapper">
-    <div class="post-header">
-      <h1>Create New Post</h1>
-      <p class="subtitle">Share your content with your followers</p>
-    </div>
+<ion-content class="post-bg">
+  <div class="wrap">
+    <header>
+      <h1>New Post</h1>
+      <p>Upload a video and write a caption.</p>
+    </header>
 
-    <div *ngIf="postError" class="error-message">
+    <div *ngIf="error" class="msg error">
       <ion-icon name="alert-circle"></ion-icon>
-      {{ postError }}
+      <span>{{ error }}</span>
     </div>
 
-    <div *ngIf="postSuccess" class="success-message">
+    <div *ngIf="success" class="msg success">
       <ion-icon name="checkmark-circle"></ion-icon>
-      {{ postSuccess }}
+      <span>{{ success }}</span>
     </div>
 
-    <form (ngSubmit)="submitPost()" class="post-form">
-      <div class="form-section">
-        <label class="form-label">Caption</label>
-        <textarea
-          class="caption-input"
-          [(ngModel)]="caption"
-          name="caption"
-          placeholder="Write something interesting..."
-          [disabled]="isPosting"
-          maxlength="2200"
-        ></textarea>
-        <div class="char-count">
-          {{ charCount }}/{{ charLimit }} characters
+    <section class="card">
+      <label class="lbl" for="caption">Caption</label>
+      <textarea
+        id="caption"
+        [(ngModel)]="caption"
+        [disabled]="busy"
+        [maxlength]="captionLimit"
+        placeholder="What's this video about?"
+      ></textarea>
+      <div class="counter">{{ caption.length }} / {{ captionLimit }}</div>
+    </section>
+
+    <section class="card">
+      <label class="lbl">Video</label>
+      <input
+        type="file"
+        #fileInput
+        hidden
+        accept="video/mp4,video/webm,video/quicktime"
+        (change)="onFileSelected($event)"
+      />
+
+      <div *ngIf="!file" class="picker" (click)="fileInput.click()">
+        <ion-icon name="cloud-upload"></ion-icon>
+        <p>Tap to choose a video</p>
+        <small>MP4, WebM, or MOV up to 4 GB</small>
+      </div>
+
+      <div *ngIf="file" class="preview">
+        <video [src]="filePreview!" controls playsinline></video>
+        <div class="preview-row">
+          <span class="filename">{{ file.name }}</span>
+          <ion-button size="small" fill="clear" color="medium" (click)="clearFile()">
+            Remove
+          </ion-button>
         </div>
       </div>
+    </section>
 
-      <div class="form-section">
-        <label class="form-label">Media (Optional)</label>
-        <div class="file-upload-area">
-          <div *ngIf="!videoPreview" class="upload-placeholder">
-            <ion-icon name="cloud-upload"></ion-icon>
-            <p>Upload video or image</p>
-            <p class="file-hint">
-              MP4, WebM (max 4GB) or image files
-            </p>
-          </div>
+    <section *ngIf="creatorInfo?.privacyLevelOptions?.length" class="card">
+      <label class="lbl" for="privacy">Privacy</label>
+      <select id="privacy" [(ngModel)]="privacyLevel" [disabled]="busy">
+        <option *ngFor="let p of creatorInfo!.privacyLevelOptions" [value]="p">
+          {{ p }}
+        </option>
+      </select>
+    </section>
 
-          <div *ngIf="videoPreview" class="preview-container">
-            <img
-              *ngIf="selectedFile?.type?.startsWith('image')"
-              [src]="videoPreview"
-              alt="Preview"
-              class="media-preview"
-            />
-            <video
-              *ngIf="selectedFile?.type?.startsWith('video')"
-              [src]="videoPreview"
-              class="media-preview"
-              controls
-            ></video>
-          </div>
+    <div class="actions">
+      <ion-button
+        expand="block"
+        color="primary"
+        [disabled]="!canSubmit"
+        (click)="submit()"
+      >
+        <ion-spinner *ngIf="busy" name="crescent" slot="start"></ion-spinner>
+        {{ busy ? 'Posting…' : 'Post to TikTok' }}
+      </ion-button>
+      <ion-button
+        expand="block"
+        fill="clear"
+        color="medium"
+        [disabled]="busy"
+        (click)="resetForm()"
+      >
+        Clear
+      </ion-button>
+    </div>
 
-          <input
-            type="file"
-            #fileInput
-            (change)="onFileSelected($event)"
-            accept="video/mp4,video/webm,image/jpeg,image/png"
-            [disabled]="isPosting"
-            class="hidden-input"
-          />
-
-          <div class="file-actions">
-            <button
-              type="button"
-              class="file-btn"
-              (click)="fileInput.click()"
-              [disabled]="isPosting"
-            >
-              <ion-icon name="add"></ion-icon>
-              {{ selectedFileName ? 'Change File' : 'Choose File' }}
-            </button>
-
-            <button
-              *ngIf="selectedFile"
-              type="button"
-              class="file-btn clear-btn"
-              (click)="clearFile()"
-              [disabled]="isPosting"
-            >
-              <ion-icon name="close"></ion-icon>
-              Remove
-            </button>
-          </div>
-
-          <p *ngIf="selectedFileName" class="selected-file">
-            <ion-icon name="checkmark"></ion-icon>
-            {{ selectedFileName }}
-          </p>
-        </div>
-      </div>
-
-      <div class="form-section">
-        <ion-button
-          expand="block"
-          [disabled]="!canSubmit"
-          (click)="submitPost()"
-          class="submit-btn"
-          [class.loading]="isPosting"
-        >
-          <ion-spinner *ngIf="isPosting" name="crescent"></ion-spinner>
-          {{ isPosting ? 'Creating Post...' : 'Create Post' }}
-        </ion-button>
-
-        <ion-button
-          expand="block"
-          fill="clear"
-          [disabled]="isPosting"
-          (click)="resetForm()"
-          color="medium"
-        >
-          Clear Form
-        </ion-button>
-      </div>
-
-      <div class="info-box">
-        <ion-icon name="information-circle"></ion-icon>
-        <div>
-          <p><strong>Daily Posting Limit:</strong></p>
-          <p>
-            TikTok limits API posts to approximately 15 per day per creator
-            account. Use the app wisely!
-          </p>
-        </div>
-      </div>
-    </form>
+    <p class="footnote">
+      TikTok limits API uploads to roughly 15 posts per creator per 24 hours.
+    </p>
   </div>
 </ion-content>

@@ -1,89 +1,88 @@
-<div class="login-container">
-  <ion-content [fullscreen]="true">
-    <div class="login-content">
-      <div class="logo-area">
-        <ion-icon name="logo-tiktok"></ion-icon>
-        <h1>TikTok Hero App</h1>
-        <p class="subtitle">Create and share your content</p>
-      </div>
+<ion-content [fullscreen]="true" class="login-bg">
+  <div class="login-wrap">
+    <div class="logo">
+      <ion-icon name="logo-tiktok"></ion-icon>
+      <h1>TikTok Hero App</h1>
+      <p>Authenticate with your TikTok account to start posting.</p>
+    </div>
 
-      <div *ngIf="error" class="error-message ion-margin">
-        <ion-icon name="alert-circle"></ion-icon>
-        {{ error }}
-      </div>
+    <div *ngIf="error" class="error">
+      <ion-icon name="alert-circle"></ion-icon>
+      <span>{{ error }}</span>
+    </div>
 
-      <div *ngIf="!showApiKeySetup" class="login-form ion-padding">
-        <ion-button
-          expand="block"
-          color="primary"
-          [disabled]="isLoading"
-          (click)="startLogin()"
-          class="login-btn"
-        >
-          <ion-icon name="logo-tiktok" slot="start"></ion-icon>
-          {{ isLoading ? 'Logging in...' : 'Login with TikTok' }}
+    <!-- Sign-in card -->
+    <div *ngIf="!showConfig" class="card">
+      <ion-button
+        expand="block"
+        color="dark"
+        [disabled]="loading || !isConfigured"
+        (click)="loginWithTikTok()"
+      >
+        <ion-icon slot="start" name="logo-tiktok"></ion-icon>
+        {{ loading ? 'Opening TikTok…' : 'Continue with TikTok' }}
+      </ion-button>
+
+      <button class="link" type="button" (click)="toggleConfig()">
+        {{ isConfigured ? 'Edit configuration' : 'Configure first' }}
+      </button>
+
+      <p *ngIf="!isConfigured" class="hint">
+        Configure your TikTok client key and the URL of your OAuth backend
+        before signing in.
+      </p>
+    </div>
+
+    <!-- Configuration card -->
+    <div *ngIf="showConfig" class="card">
+      <h2>Configuration</h2>
+
+      <ion-item>
+        <ion-label position="stacked">TikTok Client Key</ion-label>
+        <ion-input
+          [(ngModel)]="clientKey"
+          placeholder="From your TikTok developer app"
+          autocomplete="off"
+        ></ion-input>
+      </ion-item>
+      <p class="hint">
+        Find this in
+        <a href="https://developers.tiktok.com/" target="_blank" rel="noopener">
+          developers.tiktok.com
+        </a>
+        under your app's settings.
+      </p>
+
+      <ion-item>
+        <ion-label position="stacked">Backend URL</ion-label>
+        <ion-input
+          [(ngModel)]="backendUrl"
+          placeholder="https://your-backend.example.com"
+          type="url"
+          autocomplete="off"
+        ></ion-input>
+      </ion-item>
+      <p class="hint">
+        The server that holds your <strong>TikTok Client Secret</strong> and
+        proxies the OAuth token exchange and posting API. TikTok requires
+        the secret to stay server-side, so a small backend is mandatory.
+        Sample Node.js code is in <code>SETUP_GUIDE.md</code>.
+      </p>
+
+      <div class="actions">
+        <ion-button expand="block" color="primary" (click)="saveConfig()">
+          Save
         </ion-button>
-
-        <button
-          class="setup-link"
-          (click)="toggleApiKeySetup()"
-          type="button"
+        <ion-button
+          *ngIf="isConfigured"
+          expand="block"
+          fill="clear"
+          color="medium"
+          (click)="toggleConfig()"
         >
-          Configure API Keys
-        </button>
-
-        <div class="info-box ion-margin-top">
-          <ion-icon name="information-circle"></ion-icon>
-          <p>
-            To use this app, you need to authenticate with your TikTok account
-            and configure the necessary API credentials.
-          </p>
-        </div>
-      </div>
-
-      <div *ngIf="showApiKeySetup" class="api-setup ion-padding">
-        <h2>Configure API Keys</h2>
-
-        <ion-item>
-          <ion-label position="floating">TikTok Client ID</ion-label>
-          <ion-input
-            [(ngModel)]="clientId"
-            placeholder="Your TikTok Client ID"
-            type="password"
-          ></ion-input>
-        </ion-item>
-
-        <ion-item>
-          <ion-label position="floating">Backend URL</ion-label>
-          <ion-input
-            [(ngModel)]="backendUrl"
-            placeholder="http://localhost:3000"
-            type="url"
-          ></ion-input>
-        </ion-item>
-
-        <div class="button-group ion-margin-top">
-          <ion-button
-            expand="block"
-            color="success"
-            (click)="saveApiKeys()"
-          >
-            Save Configuration
-          </ion-button>
-          <ion-button
-            expand="block"
-            color="medium"
-            (click)="toggleApiKeySetup()"
-          >
-            Cancel
-          </ion-button>
-        </div>
-
-        <p class="setup-info ion-margin-top">
-          See the README or setup guide for instructions on how to obtain
-          these credentials.
-        </p>
+          Cancel
+        </ion-button>
       </div>
     </div>
-  </ion-content>
-</div>
+  </div>
+</ion-content>

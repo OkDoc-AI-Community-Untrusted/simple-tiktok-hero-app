@@ -6,12 +6,34 @@
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <!-- Cache busting: version hash -->
-  <meta name="app-version" content="1.0.0-__BUILD_TIME__">
+  <script>
+    // OAuth popup callback handler: when this page is loaded inside a popup
+    // window (with window.opener set) and the URL contains an OAuth `code`
+    // or `error`, relay it to the opener and close. This must run before
+    // Angular boots so we never render the full app inside the popup.
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var code = params.get('code');
+        var error = params.get('error');
+        if ((code || error) && window.opener && !window.opener.closed) {
+          window.opener.postMessage({
+            type: 'tiktok_oauth_callback',
+            code: code,
+            error: error,
+            error_description: params.get('error_description'),
+            state: params.get('state')
+          }, window.location.origin);
+          window.close();
+        }
+      } catch (e) {
+        // fall through to normal app render
+      }
+    })();
+  </script>
 </head>
 <body>
   <app-root></app-root>
-  <!-- OkDoc SDK Script -->
   <script src="https://cdn.jsdelivr.net/npm/@okdoc-ai/plugin-sdk@1/dist/okdoc-iframe-sdk.js"></script>
 </body>
 </html>

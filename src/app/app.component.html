@@ -1,15 +1,8 @@
 <ion-app>
-  <app-login
-    *ngIf="!isAuthenticated"
-    (login)="onLogin($event)"
-  ></app-login>
+  <app-login *ngIf="!auth" (configured)="onConfigured()"></app-login>
 
-  <div *ngIf="isAuthenticated" class="authenticated-area">
-    <app-nav
-      [isAuthenticated]="isAuthenticated"
-      [currentUser]="currentUser"
-      (logout)="onLogout()"
-    ></app-nav>
-    <app-post [user]="currentUser"></app-post>
+  <div *ngIf="auth" class="authenticated">
+    <app-nav [auth]="auth"></app-nav>
+    <app-post [auth]="auth"></app-post>
   </div>
 </ion-app>

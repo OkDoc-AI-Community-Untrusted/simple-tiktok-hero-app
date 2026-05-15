@@ -1,9 +1,14 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
-import { TikTokService, PostData } from '../../services/tiktok.service';
+import { TikTokService, CreatorInfo } from '../../services/tiktok.service';
 import { OkDocService } from '../../services/okdoc.service';
+import { TikTokAuth } from '../../services/auth-state.service';
+
+const VALID_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
+const MAX_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB
+const CAPTION_LIMIT = 2200;
 
 @Component({
   selector: 'app-post',
@@ -12,137 +17,121 @@ import { OkDocService } from '../../services/okdoc.service';
   standalone: true,
   imports: [CommonModule, FormsModule, IonicModule],
 })
-export class PostComponent implements OnInit {
-  @Input() user: any;
+export class PostComponent implements OnInit, OnDestroy {
+  @Input() auth!: TikTokAuth;
 
   caption = '';
-  selectedFile: File | null = null;
-  selectedFileName = '';
-  isPosting = false;
-  postError: string | null = null;
-  postSuccess: string | null = null;
-  videoPreview: string | null = null;
+  file: File | null = null;
+  filePreview: string | null = null;
 
-  constructor(
-    private tiktokService: TikTokService,
-    private okDocService: OkDocService
-  ) {}
+  creatorInfo: CreatorInfo | null = null;
+  privacyLevel = 'SELF_ONLY';
+
+  busy = false;
+  error: string | null = null;
+  success: string | null = null;
+
+  readonly captionLimit = CAPTION_LIMIT;
+
+  constructor(private tiktok: TikTokService, private okdoc: OkDocService) {}
 
   ngOnInit(): void {
-    this.resetForm();
+    this.loadCreatorInfo();
+    // Bridge for the `publish_post` OkDoc tool — the SDK channel can't
+    // carry a File, so the tool calls back into the visible form.
+    (window as any).__tiktokHeroAppBridge = {
+      publish: (caption: string, privacyLevel?: string) =>
+        this.publishFromTool(caption, privacyLevel),
+    };
   }
 
-  onFileSelected(event: any): void {
-    const file: File = event.target.files[0];
+  ngOnDestroy(): void {
+    delete (window as any).__tiktokHeroAppBridge;
+  }
 
-    if (file) {
-      const validTypes = ['video/mp4', 'video/webm', 'image/jpeg', 'image/png'];
-      const maxSize = 4 * 1024 * 1024 * 1024;
-
-      if (!validTypes.includes(file.type)) {
-        this.postError = 'Only MP4, WebM video and image files are supported';
-        return;
+  private async loadCreatorInfo(): Promise<void> {
+    try {
+      this.creatorInfo = await this.tiktok.getCreatorInfo();
+      const options = this.creatorInfo.privacyLevelOptions;
+      if (options && options.length && !options.includes(this.privacyLevel)) {
+        this.privacyLevel = options[0];
       }
-
-      if (file.size > maxSize) {
-        this.postError = 'File size exceeds 4GB limit';
-        return;
-      }
-
-      this.selectedFile = file;
-      this.selectedFileName = file.name;
-      this.postError = null;
-
-      if (file.type.startsWith('video/')) {
-        this.createVideoPreview(file);
-      } else if (file.type.startsWith('image/')) {
-        this.createImagePreview(file);
-      }
+    } catch (e: any) {
+      // Non-fatal: posting still works with sensible defaults.
+      console.warn('Failed to fetch creator info:', e?.message);
     }
   }
 
-  private createVideoPreview(file: File): void {
-    const reader = new FileReader();
-    reader.onload = (e: any) => {
-      this.videoPreview = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  private createImagePreview(file: File): void {
-    const reader = new FileReader();
-    reader.onload = (e: any) => {
-      this.videoPreview = e.target.result;
-    };
-    reader.readAsDataURL(file);
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!VALID_VIDEO_TYPES.includes(file.type)) {
+      this.error = `Unsupported file type: ${file.type || 'unknown'}. Use MP4, WebM, or MOV.`;
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      this.error = 'File exceeds the 4 GB TikTok upload limit.';
+      return;
+    }
+    this.error = null;
+    this.file = file;
+    this.filePreview = URL.createObjectURL(file);
   }
 
   clearFile(): void {
-    this.selectedFile = null;
-    this.selectedFileName = '';
-    this.videoPreview = null;
-  }
-
-  async submitPost(): Promise<void> {
-    if (!this.caption.trim() && !this.selectedFile) {
-      this.postError = 'Please add a caption or select a file';
-      return;
-    }
-
-    this.isPosting = true;
-    this.postError = null;
-    this.postSuccess = null;
-
-    try {
-      const postData: PostData = {
-        caption: this.caption,
-        videoFile: this.selectedFile || undefined,
-      };
-
-      const result = await this.tiktokService.createPost(postData);
-
-      if (result.success) {
-        this.postSuccess = 'Post created successfully!';
-        this.okDocService.notifyPostCreated(
-          result.videoId || '',
-          this.caption
-        );
-        this.resetForm();
-
-        setTimeout(() => {
-          this.postSuccess = null;
-        }, 3000);
-      } else {
-        this.postError = result.error || 'Failed to create post';
-      }
-    } catch (error: any) {
-      this.postError = error.message || 'An error occurred';
-    } finally {
-      this.isPosting = false;
-    }
+    if (this.filePreview) URL.revokeObjectURL(this.filePreview);
+    this.file = null;
+    this.filePreview = null;
   }
 
   resetForm(): void {
     this.caption = '';
-    this.selectedFile = null;
-    this.selectedFileName = '';
-    this.videoPreview = null;
-    this.postError = null;
-    this.postSuccess = null;
-  }
-
-  get charCount(): number {
-    return this.caption.length;
-  }
-
-  get charLimit(): number {
-    return 2200;
+    this.clearFile();
+    this.error = null;
+    this.success = null;
   }
 
   get canSubmit(): boolean {
-    return (
-      (this.caption.trim().length > 0 || this.selectedFile !== null) &&
-      !this.isPosting
+    return !this.busy && !!this.file && this.caption.trim().length > 0;
+  }
+
+  async submit(): Promise<void> {
+    if (!this.canSubmit || !this.file) return;
+    this.busy = true;
+    this.error = null;
+    this.success = null;
+    try {
+      const result = await this.tiktok.publishVideo(
+        this.file,
+        this.caption,
+        this.privacyLevel
+      );
+      this.success = `Upload started. publish_id: ${result.publishId}`;
+      this.okdoc.notifyPostCreated(result.publishId, this.caption);
+      this.resetForm();
+    } catch (e: any) {
+      this.error = e?.message || 'Posting failed.';
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async publishFromTool(
+    caption: string,
+    privacyLevel?: string
+  ): Promise<{ publishId: string }> {
+    if (!this.file) throw new Error('No video selected in the form.');
+    if (caption) this.caption = caption;
+    if (privacyLevel) this.privacyLevel = privacyLevel;
+    const result = await this.tiktok.publishVideo(
+      this.file,
+      this.caption,
+      this.privacyLevel
     );
+    this.okdoc.notifyPostCreated(result.publishId, this.caption);
+    this.success = `Upload started. publish_id: ${result.publishId}`;
+    this.resetForm();
+    return result;
   }
 }

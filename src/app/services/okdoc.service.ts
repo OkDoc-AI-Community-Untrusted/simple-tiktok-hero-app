@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 import { AuthService } from './auth.service';
+import { AuthStateService } from './auth-state.service';
 import { TikTokService } from './tiktok.service';
 
 declare global {
@@ -8,259 +9,163 @@ declare global {
   }
 }
 
-export interface ToolResult {
-  type: string;
-  content: any;
-}
+type ToolResult =
+  | { type: 'success'; content: unknown }
+  | { type: 'error'; content: { message: string } };
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable({ providedIn: 'root' })
 export class OkDocService {
-  private okDocSDK: any = null;
-  private isInitialized = false;
+  private sdk: any = null;
+  private initialized = false;
 
   constructor(
-    private authService: AuthService,
-    private tiktokService: TikTokService
+    private zone: NgZone,
+    private authState: AuthStateService,
+    private auth: AuthService,
+    private tiktok: TikTokService
   ) {}
 
-  initializeOkDoc(): void {
-    if (this.isInitialized) {
-      return;
-    }
-
-    const checkOkDoc = () => {
-      if (window.OkDoc) {
-        this.okDocSDK = window.OkDoc;
-        this.setupTools();
-        this.isInitialized = true;
-      } else {
-        setTimeout(checkOkDoc, 100);
-      }
-    };
-
-    checkOkDoc();
+  init(): void {
+    if (this.initialized) return;
+    this.waitForSdk(0);
+    this.authState.auth$.subscribe((auth) => {
+      this.sdk?.notify?.({
+        type: 'auth_state_changed',
+        data: {
+          isAuthenticated: !!auth,
+          user: auth
+            ? { openId: auth.openId, username: auth.username, displayName: auth.displayName }
+            : null,
+        },
+      });
+    });
   }
 
-  private setupTools(): void {
-    if (!this.okDocSDK) {
+  notifyPostCreated(publishId: string, caption: string): void {
+    this.sdk?.notify?.({
+      type: 'post_published',
+      data: { publishId, caption, timestamp: new Date().toISOString() },
+    });
+  }
+
+  private waitForSdk(attempt: number): void {
+    if (window.OkDoc) {
+      this.sdk = window.OkDoc;
+      this.registerWithHost();
+      this.initialized = true;
       return;
     }
+    // Try for ~10s then give up — the app still works standalone for dev.
+    if (attempt > 100) return;
+    setTimeout(() => this.waitForSdk(attempt + 1), 100);
+  }
 
-    this.okDocSDK.init({
+  private registerWithHost(): void {
+    this.sdk.init({
       id: 'simple-tiktok-hero-app',
       name: 'Simple TikTok Hero App',
       namespace: 'tiktok',
       version: '1.0.0',
-      author: 'TikTok Hero App Community',
+      author: 'OkDoc Community',
       mode: 'foreground',
     });
 
-    this.registerLoginTool();
-    this.registerPostTool();
-    this.registerLogoutTool();
-    this.registerGetUserInfoTool();
-  }
-
-  private registerLoginTool(): void {
-    this.okDocSDK.registerTool({
+    this.registerTool({
       id: 'login',
       name: 'Login to TikTok',
-      description:
-        'Authenticate with TikTok account to enable posting capabilities',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-      handler: async (): Promise<ToolResult> => {
-        try {
-          this.authService.startOAuthFlow();
-          return {
-            type: 'success',
-            content: {
-              message: 'Redirecting to TikTok login...',
-            },
-          };
-        } catch (error: any) {
-          return {
-            type: 'error',
-            content: {
-              message: error.message || 'Failed to initiate login',
-            },
-          };
-        }
+      description: 'Open the TikTok login popup so the user can authenticate.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        await this.auth.startOAuthFlow();
+        return ok({ message: 'Logged in to TikTok.' });
       },
     });
-  }
 
-  private registerPostTool(): void {
-    this.okDocSDK.registerTool({
-      id: 'create_post',
-      name: 'Create TikTok Post',
+    this.registerTool({
+      id: 'logout',
+      name: 'Logout',
+      description: 'Sign the current TikTok user out and clear stored credentials.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        this.auth.logout();
+        return ok({ message: 'Logged out.' });
+      },
+    });
+
+    this.registerTool({
+      id: 'get_user_info',
+      name: 'Get User Info',
+      description: 'Return the currently authenticated TikTok user, if any.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+      handler: async () => {
+        const auth = this.authState.current;
+        if (!auth) return err('Not authenticated.');
+        return ok({
+          openId: auth.openId,
+          username: auth.username,
+          displayName: auth.displayName,
+          avatarUrl: auth.avatarUrl,
+        });
+      },
+    });
+
+    this.registerTool({
+      id: 'publish_post',
+      name: 'Publish TikTok Post',
       description:
-        'Create a new TikTok post with caption and optional video file',
+        'Publish a TikTok post. Requires a video file already chosen in the UI — ' +
+        'this tool cannot accept files over the SDK channel, so the user must ' +
+        'select a file in the post form before calling it.',
       inputSchema: {
         type: 'object',
         properties: {
-          caption: {
+          caption: { type: 'string', description: 'Caption / post title.' },
+          privacy_level: {
             type: 'string',
-            description: 'The caption/text for the post',
-          },
-          videoUrl: {
-            type: 'string',
-            description:
-              'Optional URL to a video file to upload (must be MP4 or WebM)',
+            description: 'Privacy level (e.g. SELF_ONLY, PUBLIC_TO_EVERYONE).',
           },
         },
         required: ['caption'],
       },
-      handler: async (input: any): Promise<ToolResult> => {
-        try {
-          if (!this.authService.isAuthenticated()) {
-            return {
-              type: 'error',
-              content: {
-                message: 'Not authenticated. Please login first.',
-              },
-            };
-          }
-
-          const result = await this.tiktokService.createPost({
-            caption: input.caption,
-            coverImageUrl: input.videoUrl,
-          });
-
-          if (result.success) {
-            return {
-              type: 'success',
-              content: {
-                message: 'Post created successfully!',
-                videoId: result.videoId,
-              },
-            };
-          } else {
-            return {
-              type: 'error',
-              content: {
-                message: result.error || 'Failed to create post',
-              },
-            };
-          }
-        } catch (error: any) {
-          return {
-            type: 'error',
-            content: {
-              message: error.message || 'An error occurred while creating post',
-            },
-          };
+      handler: async (input: any) => {
+        // Bridge to the visible PostComponent via a window-scoped hook so the
+        // user-selected file stays in the iframe (where the user picked it).
+        const bridge = (window as any).__tiktokHeroAppBridge;
+        if (!bridge?.publish) {
+          return err('Open the app UI and select a video first.');
         }
+        const result = await bridge.publish(input?.caption ?? '', input?.privacy_level);
+        return ok(result);
       },
     });
   }
 
-  private registerLogoutTool(): void {
-    this.okDocSDK.registerTool({
-      id: 'logout',
-      name: 'Logout',
-      description: 'Logout from TikTok Hero App',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-      handler: async (): Promise<ToolResult> => {
-        try {
-          this.authService.logout();
-          return {
-            type: 'success',
-            content: {
-              message: 'Logged out successfully',
-            },
-          };
-        } catch (error: any) {
-          return {
-            type: 'error',
-            content: {
-              message: error.message || 'Failed to logout',
-            },
-          };
-        }
-      },
-    });
-  }
-
-  private registerGetUserInfoTool(): void {
-    this.okDocSDK.registerTool({
-      id: 'get_user_info',
-      name: 'Get User Info',
-      description: 'Retrieve current authenticated user information',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-      handler: async (): Promise<ToolResult> => {
-        try {
-          const auth = this.authService.getStoredAuth();
-          if (!auth) {
-            return {
-              type: 'error',
-              content: {
-                message: 'Not authenticated',
-              },
-            };
+  /** Wraps the host-supplied handler so state mutations land inside Angular's zone. */
+  private registerTool(tool: {
+    id: string;
+    name: string;
+    description: string;
+    inputSchema: unknown;
+    handler: (input: any) => Promise<ToolResult>;
+  }): void {
+    this.sdk.registerTool({
+      ...tool,
+      handler: (input: any) =>
+        this.zone.run(async () => {
+          try {
+            return await tool.handler(input);
+          } catch (e: any) {
+            return err(e?.message || String(e));
           }
-
-          return {
-            type: 'success',
-            content: {
-              userId: auth.userId,
-              username: auth.username,
-              displayName: auth.displayName,
-              profileImageUrl: auth.profileImageUrl,
-            },
-          };
-        } catch (error: any) {
-          return {
-            type: 'error',
-            content: {
-              message: error.message || 'Failed to get user info',
-            },
-          };
-        }
-      },
+        }),
     });
   }
+}
 
-  notifyPostCreated(videoId: string, caption: string): void {
-    if (!this.okDocSDK) {
-      return;
-    }
+function ok(content: unknown): ToolResult {
+  return { type: 'success', content };
+}
 
-    this.okDocSDK.notify({
-      type: 'post_created',
-      data: {
-        videoId,
-        caption,
-        timestamp: new Date().toISOString(),
-      },
-    });
-  }
-
-  notifyAuthStateChanged(isAuthenticated: boolean, user?: any): void {
-    if (!this.okDocSDK) {
-      return;
-    }
-
-    this.okDocSDK.notify({
-      type: 'auth_state_changed',
-      data: {
-        isAuthenticated,
-        user: user || null,
-        timestamp: new Date().toISOString(),
-      },
-    });
-  }
+function err(message: string): ToolResult {
+  return { type: 'error', content: { message } };
 }

@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
-import { AuthService } from './services/auth.service';
+import { AuthStateService, TikTokAuth } from './services/auth-state.service';
 import { OkDocService } from './services/okdoc.service';
+import { ConfigService } from './services/config.service';
 import { LoginComponent } from './components/login/login.component';
 import { PostComponent } from './components/post/post.component';
 import { NavComponent } from './components/nav/nav.component';
@@ -13,38 +13,25 @@ import { NavComponent } from './components/nav/nav.component';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
   standalone: true,
-  imports: [CommonModule, FormsModule, IonicModule, LoginComponent, PostComponent, NavComponent],
+  imports: [CommonModule, IonicModule, LoginComponent, PostComponent, NavComponent],
 })
 export class AppComponent implements OnInit {
-  isAuthenticated = false;
-  currentUser: any = null;
+  auth: TikTokAuth | null = null;
+  configured = false;
 
   constructor(
-    private authService: AuthService,
-    private okDocService: OkDocService
+    private authState: AuthStateService,
+    private config: ConfigService,
+    private okdoc: OkDocService
   ) {}
 
-  ngOnInit() {
-    this.initializeApp();
+  ngOnInit(): void {
+    this.configured = this.config.isConfigured;
+    this.authState.auth$.subscribe((auth) => (this.auth = auth));
+    this.okdoc.init();
   }
 
-  private initializeApp() {
-    const savedAuth = this.authService.getStoredAuth();
-    if (savedAuth) {
-      this.isAuthenticated = true;
-      this.currentUser = savedAuth;
-    }
-    this.okDocService.initializeOkDoc();
-  }
-
-  onLogin(user: any) {
-    this.isAuthenticated = true;
-    this.currentUser = user;
-  }
-
-  onLogout() {
-    this.isAuthenticated = false;
-    this.currentUser = null;
-    this.authService.logout();
+  onConfigured(): void {
+    this.configured = true;
   }
 }

@@ -1,8 +1,9 @@
-import { Component, EventEmitter, Output, OnInit } from '@angular/core';
+import { Component, EventEmitter, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
-import { AuthService, TikTokAuth } from '../../services/auth.service';
+import { AuthService } from '../../services/auth.service';
+import { ConfigService } from '../../services/config.service';
 
 @Component({
   selector: 'app-login',
@@ -11,74 +12,56 @@ import { AuthService, TikTokAuth } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule, IonicModule],
 })
-export class LoginComponent implements OnInit {
-  @Output() login = new EventEmitter<TikTokAuth>();
+export class LoginComponent {
+  @Output() configured = new EventEmitter<void>();
 
-  isLoading = false;
+  clientKey = this.config.clientKey;
+  backendUrl = this.config.backendUrl;
+  showConfig = !this.config.isConfigured;
+
+  loading = false;
   error: string | null = null;
-  showApiKeySetup = false;
-  clientId = '';
-  backendUrl = '';
 
-  constructor(private authService: AuthService) {}
+  constructor(private auth: AuthService, private config: ConfigService) {}
 
-  ngOnInit(): void {
-    this.clientId = localStorage.getItem('tiktok_client_id') || '';
-    this.backendUrl = localStorage.getItem('backend_url') || '';
-    this.checkOAuthCallback();
+  get isConfigured(): boolean {
+    return this.config.isConfigured;
   }
 
-  private checkOAuthCallback(): void {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-
-    if (code && state) {
-      this.handleOAuthCallback(code);
+  saveConfig(): void {
+    const key = this.clientKey.trim();
+    const url = this.backendUrl.trim();
+    if (!key || !url) {
+      this.error = 'Both fields are required.';
+      return;
     }
-  }
-
-  async handleOAuthCallback(code: string): Promise<void> {
-    this.isLoading = true;
-    this.error = null;
-
     try {
-      const auth = await this.authService.handleOAuthCallback(code);
-      this.login.emit(auth);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } catch (error: any) {
-      this.error = error.message || 'Failed to authenticate';
-    } finally {
-      this.isLoading = false;
-    }
-  }
-
-  startLogin(): void {
-    if (!this.clientId) {
-      this.error = 'Please configure API keys first';
-      this.showApiKeySetup = true;
+      new URL(url);
+    } catch {
+      this.error = 'Backend URL must be a valid http(s) URL.';
       return;
     }
-
-    this.isLoading = true;
-    this.authService.startOAuthFlow();
-  }
-
-  saveApiKeys(): void {
-    if (!this.clientId || !this.backendUrl) {
-      this.error = 'Please fill in all required fields';
-      return;
-    }
-
-    localStorage.setItem('tiktok_client_id', this.clientId);
-    localStorage.setItem('backend_url', this.backendUrl);
-
+    this.config.save(key, url);
     this.error = null;
-    this.showApiKeySetup = false;
+    this.showConfig = false;
+    this.configured.emit();
   }
 
-  toggleApiKeySetup(): void {
-    this.showApiKeySetup = !this.showApiKeySetup;
+  async loginWithTikTok(): Promise<void> {
+    this.loading = true;
+    this.error = null;
+    try {
+      await this.auth.startOAuthFlow();
+      // Success — AuthStateService will push the new auth, AppComponent re-renders.
+    } catch (e: any) {
+      this.error = e?.message || 'Login failed.';
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  toggleConfig(): void {
+    this.showConfig = !this.showConfig;
     this.error = null;
   }
 }
