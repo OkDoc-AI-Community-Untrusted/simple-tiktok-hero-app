@@ -6,6 +6,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve --port 4200",
+    "start-other": "ng serve --port 4301",
     "build": "ng build",
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
@@ -32,6 +33,6 @@
     "@angular/cli": "^20.0.0",
     "@angular/compiler-cli": "^20.0.0",
     "@types/node": "^20.0.0",
-    "typescript": "~5.6.0"
+    "typescript": "~5.8.0"
   }
 }

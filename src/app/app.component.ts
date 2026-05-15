@@ -1,11 +1,19 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { IonicModule } from '@ionic/angular';
 import { AuthService } from './services/auth.service';
 import { OkDocService } from './services/okdoc.service';
+import { LoginComponent } from './components/login/login.component';
+import { PostComponent } from './components/post/post.component';
+import { NavComponent } from './components/nav/nav.component';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
+  standalone: true,
+  imports: [CommonModule, FormsModule, IonicModule, LoginComponent, PostComponent, NavComponent],
 })
 export class AppComponent implements OnInit {
   isAuthenticated = false;

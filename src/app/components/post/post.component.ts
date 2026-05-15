@@ -1,4 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { IonicModule } from '@ionic/angular';
 import { TikTokService, PostData } from '../../services/tiktok.service';
 import { OkDocService } from '../../services/okdoc.service';
 
@@ -6,6 +9,8 @@ import { OkDocService } from '../../services/okdoc.service';
   selector: 'app-post',
   templateUrl: './post.component.html',
   styleUrls: ['./post.component.scss'],
+  standalone: true,
+  imports: [CommonModule, FormsModule, IonicModule],
 })
 export class PostComponent implements OnInit {
   @Input() user: any;
